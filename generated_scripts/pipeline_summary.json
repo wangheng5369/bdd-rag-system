@@ -1,0 +1,86 @@
+[
+  {
+    "use_case_id": "Tc_Func_Node_001",
+    "use_case_name": "创建100G数据盘的节点",
+    "query": "创建100G数据盘的节点 创建集群 创建节点，选择2u4g规格，设置数据盘为100G，磁盘类型不限制",
+    "hit": true,
+    "matched_bdds_count": 1,
+    "matched_sdks_count": 1,
+    "generated_steps_count": 0,
+    "script_path": "/Users/pcr4g0/AI-learning/bdd-test/bdd-rag-system/generated_scripts/Tc_Func_Node_001.py",
+    "test_result": {
+      "scenario": "Tc_Func_Node_001",
+      "passed": false,
+      "total": 0,
+      "passed_count": 0,
+      "failed_count": 0,
+      "skipped_count": 0,
+      "duration": null,
+      "steps": [],
+      "stderr": "执行失败: [Errno 2] No such file or directory: 'pytest'"
+    }
+  },
+  {
+    "use_case_id": "Tc_Func_Node_002",
+    "use_case_name": "删除100G数据盘的节点",
+    "query": "删除100G数据盘的节点 删除集群下200G数据盘的节点",
+    "hit": false,
+    "matched_bdds_count": 0,
+    "matched_sdks_count": 1,
+    "generated_steps_count": 6,
+    "script_path": "/Users/pcr4g0/AI-learning/bdd-test/bdd-rag-system/generated_scripts/Tc_Func_Node_002.py",
+    "test_result": {
+      "scenario": "Tc_Func_Node_002",
+      "passed": false,
+      "total": 0,
+      "passed_count": 0,
+      "failed_count": 0,
+      "skipped_count": 0,
+      "duration": null,
+      "steps": [],
+      "stderr": "执行失败: [Errno 2] No such file or directory: 'pytest'"
+    }
+  },
+  {
+    "use_case_id": "Tc_Func_Node_003",
+    "use_case_name": "纳管200G数据盘的节点",
+    "query": "纳管200G数据盘的节点 在ecs服务创建100G的虚机 纳管虚机到cce集群",
+    "hit": true,
+    "matched_bdds_count": 1,
+    "matched_sdks_count": 1,
+    "generated_steps_count": 0,
+    "script_path": "/Users/pcr4g0/AI-learning/bdd-test/bdd-rag-system/generated_scripts/Tc_Func_Node_003.py",
+    "test_result": {
+      "scenario": "Tc_Func_Node_003",
+      "passed": false,
+      "total": 0,
+      "passed_count": 0,
+      "failed_count": 0,
+      "skipped_count": 0,
+      "duration": null,
+      "steps": [],
+      "stderr": "执行失败: [Errno 2] No such file or directory: 'pytest'"
+    }
+  },
+  {
+    "use_case_id": "Tc_Func_Node_004",
+    "use_case_name": "重置100G数据盘的节点",
+    "query": "重置100G数据盘的节点 集群下创建100G数据盘的节点 重置节点",
+    "hit": true,
+    "matched_bdds_count": 1,
+    "matched_sdks_count": 1,
+    "generated_steps_count": 0,
+    "script_path": "/Users/pcr4g0/AI-learning/bdd-test/bdd-rag-system/generated_scripts/Tc_Func_Node_004.py",
+    "test_result": {
+      "scenario": "Tc_Func_Node_004",
+      "passed": false,
+      "total": 0,
+      "passed_count": 0,
+      "failed_count": 0,
+      "skipped_count": 0,
+      "duration": null,
+      "steps": [],
+      "stderr": "执行失败: [Errno 2] No such file or directory: 'pytest'"
+    }
+  }
+]

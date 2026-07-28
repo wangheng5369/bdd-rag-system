@@ -1,0 +1,7 @@
+# LLM 配置
+# 提供商: anthropic 或 openai（MiniMax 等兼容 API 均用 openai）
+llm_provider: "openai"
+base_url: "https://api.minimaxi.com/v1"
+api_key: "sk-cp-feIYS5L9B0tTu1AwrczRDx9K46pKAlLLXODtRifFyASjs7C5cQxSu3Mb70eDsMPqxPBfNgy7ozpsYbqiqqWxP9Pf5X1QfoPhcTSWW0QkD6T3wH0prHq0R_E"  # 留空则从环境变量 OPENAI_API_KEY 读取
+model: "MiniMax-M3"
+max_tokens: 4096

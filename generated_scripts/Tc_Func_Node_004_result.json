@@ -1,0 +1,11 @@
+{
+  "scenario": "Tc_Func_Node_004",
+  "passed": false,
+  "total": 0,
+  "passed_count": 0,
+  "failed_count": 0,
+  "skipped_count": 0,
+  "duration": null,
+  "steps": [],
+  "stderr": "执行失败: [Errno 2] No such file or directory: 'pytest'"
+}
