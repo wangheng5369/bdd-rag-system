@@ -16,13 +16,12 @@ from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 import re
 import numpy as np
 
+from core.config import RECALL_THRESHOLD, RERANKER_THRESHOLD, KB1_RECALL_THRESHOLD
+
 
 # 默认配置
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-large-zh-v1.5"
 DEFAULT_QUERY_INSTRUCTION = "为检索任务编码："
-
-# Reranker 默认阈值
-DEFAULT_RERANKER_THRESHOLD = 0.6
 
 # ============================================================
 # 阶段2: 动作关键词同义词映射表 (Action Mapping)
@@ -121,15 +120,12 @@ def is_hard_rule_miss(query: str, candidate_content: str) -> bool:
 class Retrieval:
     """向量检索模块 - 使用余弦相似度"""
 
-    # 默认相似度阈值
-    DEFAULT_SIMILARITY_THRESHOLD = 0.6
-
     def __init__(
         self,
         embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         persist_dirs: Optional[Dict[str, str]] = None,
-        similarity_threshold: float = 0.6,
-        reranker_threshold: float = DEFAULT_RERANKER_THRESHOLD
+        similarity_threshold: float = RECALL_THRESHOLD,
+        reranker_threshold: float = RERANKER_THRESHOLD
     ):
         """
         初始化检索模块
@@ -216,8 +212,8 @@ class Retrieval:
         # 过滤：只保留相似度 >= threshold 的结果
         recalled = []
         for doc, score in results:
-            # 余弦相似度分数（0-1之间，越大越相似）
-            cosine_score = float(score)
+            # 余弦距离转相似度：ChromaDB 的 cosine space 返回距离（0=相似，1=不相似），需转成相似度
+            cosine_score = 1.0 - float(score)
 
             if cosine_score >= effective_threshold:
                 recalled.append({

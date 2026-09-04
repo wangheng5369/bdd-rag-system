@@ -6,9 +6,10 @@
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
+from core.config import RERANKER_THRESHOLD
+
 # bge-reranker 模型名称
 DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-base"
-DEFAULT_THRESHOLD = 0.6
 
 
 @dataclass
@@ -25,7 +26,7 @@ class Reranker:
     def __init__(
         self,
         model_name: str = DEFAULT_RERANKER_MODEL,
-        threshold: float = DEFAULT_THRESHOLD,
+        threshold: float = RERANKER_THRESHOLD,
         device: str = "cpu"
     ):
         """
@@ -157,7 +158,7 @@ class BGERerankerWrapper:
     def __init__(
         self,
         model_name: str = DEFAULT_RERANKER_MODEL,
-        threshold: float = DEFAULT_THRESHOLD,
+        threshold: float = RERANKER_THRESHOLD,
         device: str = "cpu"
     ):
         self.reranker = Reranker(model_name, threshold, device)

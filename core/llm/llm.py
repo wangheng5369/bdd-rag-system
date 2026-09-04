@@ -4,11 +4,15 @@ LLM生成模块
 """
 
 import os
+from pathlib import Path
 from typing import List, Dict, Optional
 
 
 class LLMGenerator:
     """LLM 脚本生成模块"""
+
+    # System Prompt 文件路径
+    SYSTEM_PROMPT_PATH = Path(__file__).parent.parent / "prompt" / "system_prompt.md"
 
     def __init__(
         self,
@@ -16,7 +20,8 @@ class LLMGenerator:
         base_url: str = "",
         api_key: Optional[str] = None,
         model: str = "MiniMax-M3",
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        system_prompt: Optional[str] = None,
     ):
         """
         初始化 LLMGenerator
@@ -27,6 +32,7 @@ class LLMGenerator:
             api_key: API Key，默认从环境变量读取
             model: 模型名称
             max_tokens: 最大输出 token 数
+            system_prompt: System Prompt 内容，None 时自动从文件加载
         """
         self.provider = provider
         self.base_url = base_url
@@ -34,7 +40,39 @@ class LLMGenerator:
         self.model = model
         self.max_tokens = max_tokens
         self.client = None
+        # System Prompt：优先使用传入值，其次从文件加载
+        self.system_prompt = system_prompt or self._load_system_prompt()
         self._init_client()
+
+    def _load_system_prompt(self) -> str:
+        """从文件加载 System Prompt"""
+        try:
+            with open(self.SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+                content = f.read()
+            print(f"System Prompt 已加载: {self.SYSTEM_PROMPT_PATH}")
+            return content
+        except FileNotFoundError:
+            print(f"警告: System Prompt 文件未找到 ({self.SYSTEM_PROMPT_PATH})，使用内置默认")
+            return self._get_default_system_prompt()
+        except Exception as e:
+            print(f"警告: System Prompt 加载失败 ({e})，使用内置默认")
+            return self._get_default_system_prompt()
+
+    def _get_default_system_prompt(self) -> str:
+        """获取默认 System Prompt（当文件不存在时）"""
+        return """# Role
+你是一名资深的 K8s / CCE 云平台自动化测试专家，精通 BDD（行为驱动开发）规范与 Python pytest-bdd 自动化测试。
+
+# 绝对约束
+1. 只能使用 Context 2 中列出的 SDK API，禁止调用任何其他函数
+2. 必须优先复用 Context 1 中的已有 BDD 语句，原封不动
+3. 输出必须是纯文本，禁止 markdown 格式
+4. 缺失 API 时，函数体只写 pass 或 TODO
+
+# 输出格式
+1. .feature 文件（Gherkin 规范）
+2. .py 文件（pytest-bdd 实现）
+"""
 
     def _init_client(self):
         """初始化客户端"""
@@ -62,17 +100,33 @@ class LLMGenerator:
                 print("警告: openai 包未安装，运行: pip install openai")
                 self.client = None
 
-    def generate(self, prompt: str) -> str:
-        """调用 LLM 生成内容"""
+    def generate(self, prompt: str, use_system: bool = True) -> str:
+        """
+        调用 LLM 生成内容
+
+        Args:
+            prompt: User Prompt 内容
+            use_system: 是否使用 System Prompt，默认为 True
+
+        Returns:
+            LLM 生成的文本内容
+        """
         if self.client is None:
             return "[LLMGenerator 未配置 API Key，无法生成内容]"
+
+        messages = []
+        # System Prompt
+        if use_system and self.system_prompt:
+            messages.append({"role": "system", "content": self.system_prompt})
+        # User Prompt
+        messages.append({"role": "user", "content": prompt})
 
         try:
             if self.provider == "anthropic":
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=self.max_tokens,
-                    messages=[{"role": "user", "content": prompt}]
+                    messages=messages
                 )
                 return response.content[0].text
             else:
@@ -80,7 +134,7 @@ class LLMGenerator:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     max_tokens=self.max_tokens,
-                    messages=[{"role": "user", "content": prompt}]
+                    messages=messages
                 )
                 return response.choices[0].message.content
         except Exception as e:
@@ -182,46 +236,19 @@ def build_script_prompt_impl(
 
 def _get_inline_script_template() -> str:
     """内联备用模板（当模板文件不存在时使用）"""
-    return """# 场景：{scenario}
-
-# Role
-你是一名资深的 K8s / CCE 云平台自动化测试专家，精通 BDD（行为驱动开发）规范与 Python pytest-bdd 自动化测试。
-
-# 重要约束
-1. **只能使用 Context 2 中列出的 API**，禁止调用任何其他函数
-2. 如果某个操作的 API 不在 Context 2 中，请：
-   - 只生成 BDD Step 定义（Gherkin 语句）
-   - 函数体内部只写 pass 或 `# TODO: 缺少 API，无法实现`
-   - 在文件顶部添加注释 `# 警告: 缺少以下 API: xxx`
+    return """# Task
+根据以下上下文信息，生成 BDD Feature 文件和 Python pytest-bdd 实现代码。
 
 {ctx1_block}{ctx2_block}{ctx3_block}
 ---
 
 ## 输出要求
-1. **优先复用**：Context 1 中的已有 Gherkin 语句原封不动
-2. **Python 代码**：每个 Step 对应 @when/@then/@given 装饰器，使用 context 字典传参
-3. **SDK 调用**：参数必须与 Context 2 中的 SDK 签名完全一致，禁止虚构参数
-4. **格式**：仅输出 Python 代码，不要 markdown 标记（如 ```python）
-5. **缺失 API 处理**：如果需要调用的 API 不在 Context 2 中，Step 函数体只写 pass 或 TODO 注释
 
-## 示例输出格式
-from pytest_bdd import given, when, then, parsers
+### 板块一：.feature 文件
+使用标准 Gherkin 格式输出完整的 Feature 文件。
 
-# 警告: 缺少以下 API: get_node, some_missing_api
-
-@given("已存在可用集群")
-def step_given_cluster(context):
-    pass  # TODO: 缺少 API，无法实现
-
-@when("构造创建节点请求，名称为NAME")
-def step_build_node_req(context, name):
-    context["node_req"] = {"name": name}
-
-@when("调用 create_node 创建节点")
-def step_create_node(context):
-    from cce_sdk.node import create_node
-    result = create_node(**context["node_req"])
-    context["node_id"] = result["node_id"]
+### 板块二：.py 文件
+输出新写步骤的 Python pytest-bdd 实现代码。
 """
 
 

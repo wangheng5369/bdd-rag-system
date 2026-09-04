@@ -13,6 +13,7 @@ from core.step_writer import StepWriter, Step
 from core.llm import LLMGenerator, create_llm
 from core.testing import LocalTester, TestResult
 from core.pipeline.script_verifier import ScriptVerifier, VerificationError
+from core.config import RECALL_THRESHOLD, RERANKER_THRESHOLD, KB1_RECALL_THRESHOLD
 from self_healing.fast_path.fast_path import FastPathHealer, FastPathErrorType
 from self_healing.slow_path.slow_path import SlowPathHealer
 
@@ -57,8 +58,8 @@ class Pipeline:
         kb2_dir: str,
         kb3_dir: str = None,
         llm: Optional[LLMGenerator] = None,
-        similarity_threshold: float = 0.4,
-        reranker_threshold: float = 0.6,
+        similarity_threshold: float = RECALL_THRESHOLD,
+        reranker_threshold: float = RERANKER_THRESHOLD,
         output_dir: str = "generated_scripts"
     ):
         """
@@ -199,14 +200,13 @@ class Pipeline:
                             'message': step_result.error or '',
                             'step_name': step_result.step_name
                         }
-                        fixed, msg = healer.diagnose_and_heal(
-                            log_info,
-                            result.script_path
-                        )
+                        fixed, msg, ticket_path, category = healer.diagnose_and_heal(log_info)
                         healed_steps.append({
                             'step': step_result.step_name,
                             'fixed': fixed,
-                            'message': msg
+                            'message': msg,
+                            'ticket_path': ticket_path,
+                            'category': category
                         })
                         print(f"    🔧 自愈: {step_result.step_name} → {msg}")
 
@@ -275,7 +275,7 @@ class Pipeline:
                 query=use_case.query,
                 kb_name="kb1",
                 top_k=5,
-                threshold=0.3  # KB1 查询用较低阈值
+                threshold=KB1_RECALL_THRESHOLD
             )
             sdk_examples = [{"content": s.get("content", "")} for s in kb1_results]
             matched_sdks_for_verify = kb1_results

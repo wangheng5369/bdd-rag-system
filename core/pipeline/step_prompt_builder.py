@@ -10,6 +10,7 @@ from pathlib import Path
 
 from core.retrieval.retrieval import Retrieval
 from core.step_writer import StepWriter
+from core.config import RECALL_THRESHOLD, RERANKER_THRESHOLD, KB1_RECALL_THRESHOLD
 
 
 @dataclass
@@ -18,8 +19,12 @@ class StepMatchResult:
     original_step: str           # 原始步骤文本
     matched_bdd: Optional[str]   # 命中的已有 BDD 语句（字面量）
     is_new: bool                 # 是否需要新写
-    sdk_info: Optional[Dict]    # KB1 中匹配的 SDK 信息
+    sdk_info: Optional[Dict]     # KB1 中匹配的 SDK 信息
     rerank_score: float          # 重排分数
+    # Reference 字段（追踪知识库来源）
+    reference_type: str = ""     # existing_bdd / new_sdk / param_config
+    reference_source: str = ""    # kb1 / kb2 / kb3
+    reference_id: str = ""       # chunk_xxx / api_xxx
 
 
 @dataclass
@@ -37,11 +42,11 @@ class StepPromptBuilder:
     """
 
     # BDD Step 匹配阈值（向量检索）
-    SIMILARITY_THRESHOLD = 0.4
+    SIMILARITY_THRESHOLD = RECALL_THRESHOLD
     # Reranker 阈值（低于此值认为需要新写）
-    RERANK_THRESHOLD = 0.5
+    RERANK_THRESHOLD = RERANKER_THRESHOLD
     # KB1 SDK 匹配时使用更低的初始阈值（让更多候选通过，再由硬规则过滤）
-    KB1_SIMILARITY_THRESHOLD = 0.3
+    KB1_SIMILARITY_THRESHOLD = KB1_RECALL_THRESHOLD
 
     def __init__(self, kb1_dir: str, kb2_dir: str):
         self.retrieval = Retrieval(
@@ -111,7 +116,10 @@ class StepPromptBuilder:
                     matched_bdd=matched_bdd,
                     is_new=False,
                     sdk_info=sdk_info,
-                    rerank_score=score
+                    rerank_score=score,
+                    reference_type="existing_bdd",
+                    reference_source="kb2",
+                    reference_id=self._extract_chunk_id(matched_bdd)
                 ))
             else:
                 # 未命中，需要新写
@@ -135,13 +143,31 @@ class StepPromptBuilder:
                     print(f"    📦 KB1 SDK (score={best_sdk['score']:.4f})")
                     print(f"       {best_sdk['content'][:80]}...")
 
-                step_results.append(StepMatchResult(
-                    original_step=step_text,
-                    matched_bdd=None,
-                    is_new=True,
-                    sdk_info=best_sdk,
-                    rerank_score=best_sdk["score"] if best_sdk else 0.0
-                ))
+                # 构建 Reference 信息
+                if best_sdk:
+                    api_name = self._extract_api_name(best_sdk.get("content", ""))
+                    ref_type = "param_config" if "设置" in step_text else "new_sdk"
+                    step_results.append(StepMatchResult(
+                        original_step=step_text,
+                        matched_bdd=None,
+                        is_new=True,
+                        sdk_info=best_sdk,
+                        rerank_score=best_sdk["score"],
+                        reference_type=ref_type,
+                        reference_source="kb1",
+                        reference_id=f"api_{api_name}" if api_name else "unknown"
+                    ))
+                else:
+                    step_results.append(StepMatchResult(
+                        original_step=step_text,
+                        matched_bdd=None,
+                        is_new=True,
+                        sdk_info=None,
+                        rerank_score=0.0,
+                        reference_type="missing",
+                        reference_source="",
+                        reference_id=""
+                    ))
 
         # 组装 prompt
         prompt = self._assemble_prompt(use_case, step_results)
@@ -154,7 +180,11 @@ class StepPromptBuilder:
         )
 
     def _assemble_prompt(self, use_case, step_results: List[StepMatchResult]) -> str:
-        """组装完整的 prompt"""
+        """
+        组装完整的 User Prompt
+
+        注意：Role 和约束已移至 System Prompt，这里只包含任务相关的内容
+        """
         # 分离已有和新写步骤
         existing_steps = [r for r in step_results if not r.is_new]
         new_steps = [r for r in step_results if r.is_new]
@@ -172,91 +202,142 @@ class StepPromptBuilder:
         # 构建 Context 3：原始用例
         context3 = self._build_context3(use_case)
 
-        prompt = f"""# Role
-你是一名资深的 K8s / CCE 云平台自动化测试专家，精通 BDD（行为驱动开发）规范与 Python pytest-bdd 自动化测试。
+        # 统计信息
+        new_step_count = len(new_steps)
+        existing_step_count = len(existing_for_ctx1)
+        sdk_api_count = len(set(r.sdk_info.get("content", "")[:50] for r in new_steps if r.sdk_info))
 
-# Task
-请将【待转换的原始文本用例】翻译并组装成标准的 Gherkin 格式 BDD 场景（Scenario），并为其中需要新写的 BDD 步骤绑定对应的 SDK 调用。
+        prompt = f"""# Task
+将【待转换的原始文本用例】翻译并组装成标准的 Gherkin 格式 BDD 场景，并为需要新写的 BDD 步骤绑定对应的 SDK 调用。
+
+## 本次任务统计
+
+- 已有 BDD 步骤可复用：{existing_step_count} 个
+- 需要新写的步骤：{new_step_count} 个
+- 可用的 SDK API：{sdk_api_count} 个
 
 ---
 
-# Context 1: 已有匹配到的 BDD 步骤定义库 (Existing BDD Steps)
-> 规则：优先使用以下已存在的 BDT 规范语句，**保持原字面表达不变**，直接复用。
+# Context 1: 已有匹配到的 BDD 步骤定义库
+
+> 规则：必须原封不动复用以下已有语句，不得修改措辞
 
 {context1}
 
 ---
 
-# Context 2: 可用的 SDK 函数知识库 (SDK Knowledge Base)
-> 规则：对于无法在 Context 1 中找到匹配的【新步骤】，请严格参考以下 SDK 接口定义来设计【新 BDD 语句】及其 Python Step 代码。
+# Context 2: 可用的 SDK 函数知识库
+
+> 规则：仅使用以下 API 创建新 BDD 语句和 Python 实现
 
 {context2}
 
 ---
 
-# Context 3: 待转换的原始文本用例 (Input Test Case)
+# Context 3: 待转换的原始文本用例
+
 {context3}
 
 ---
 
-# Instruction / Constrains (输出约束与思考要求)
+# 输出要求
 
-1. **组合策略**：
-   - 遍历原始用例，如果能够匹配 **Context 1** 中的已存在 BDD 语句，必须**优先且原封不动地**复用已有语句。
-   - 如果属于新逻辑，参考 **Context 2** 的 SDK 规范，按照以下规则新创 BDD 语句：
-     - `When` 对应动词操作（如：`触发重置节点操作，设置重写系统为 True`）。
-     - `Then` 对应断言与状态校验。
+请按以下顺序输出三个板块：
 
-2. **语法规范**：
-   - 使用标准的 Gherkin 结构（`Scenario` / `Given` / `When` / `Then` / `And`）。
-   - 谓词（创建/删除/重置等）必须精准，禁止混淆。
+## 板块一：.feature 文件
 
-3. **输出格式**：
-   请分为以下两个板块输出：
-   - **板块一**：组装完成的 `.feature` 文件 (Gherkin 规范)。
-   - **板块二**：仅针对【新写的 BDD 步骤】，提供 Python `pytest-bdd` 实现代码（绑定 Context 2 中的 SDK 函数）。
+输出完整的 Feature 文件内容，使用标准 Gherkin 格式。
 
----
+## 板块二：.py 文件
 
-# Output Response
+仅输出新写步骤的 Python pytest-bdd 实现代码。
+
+## 板块三：Reference 映射表
+
+每个 step 必须标注来源，格式如下：
+
+```reference
+## Reference
+| Step | Type | Source | ID |
+|------|------|--------|-----|
+| Given 已存在可用集群 | existing_bdd | kb2 | chunk_001 |
+| When 构造创建ECS虚机请求 | new_sdk | kb1 | api_create_ecs |
+| ... | ... | ... | ... |
+```
 """
         return prompt.strip()
 
     def _build_context1(self, existing_steps: List[StepMatchResult]) -> str:
-        """构建 Context 1：已有 BDD 步骤"""
+        """
+        构建 Context 1：已有 BDD 步骤（表格格式，含 ID）
+
+        格式：
+        | ID | BDD 语句 |
+        |----|----------|
+        | kb2/chunk_xxx | Given ... |
+        """
         if not existing_steps:
             return "（无，已有的 BDD 步骤为空，所有步骤均需新写）"
 
-        lines = []
+        # 构建表格
+        lines = ["| ID | BDD 语句 |", "|----|----------|"]
+        seen = set()
         for r in existing_steps:
-            # 从 matched_bdd 中提取 Gherkin 行
+            # 提取 Gherkin 行
             gherkin_lines = self._extract_gherkin(r.matched_bdd)
             for gl in gherkin_lines:
-                lines.append(f"- {gl.strip()}")
+                gl = gl.strip()
+                if gl and gl not in seen:
+                    seen.add(gl)
+                    # reference_id 格式: kb2/chunk_xxx
+                    ref_id = f"{r.reference_source}/{r.reference_id}" if r.reference_id else "unknown"
+                    lines.append(f"| {ref_id} | {gl} |")
 
-        # 去重
-        unique_lines = list(dict.fromkeys(lines))
-        return "\n".join(unique_lines) if unique_lines else "（无）"
+        return "\n".join(lines) if len(lines) > 2 else "（无）"
 
     def _build_context2(self, new_steps: List[StepMatchResult]) -> str:
-        """构建 Context 2：SDK 信息"""
+        """
+        构建 Context 2：SDK 信息（表格格式，含 ID）
+
+        格式：
+        | ID | API 名称 | 签名 |
+        |----|----------|------|
+        | kb1/api_xxx | create_ecs | def create_ecs(...) |
+        """
         if not new_steps:
             return "（无，所有步骤均已匹配到已有 BDD）"
 
-        lines = []
-        seen_apis = set()
-
+        # 按 API 去重
+        api_map = {}  # api_name -> (ref_id, content)
         for r in new_steps:
             if r.sdk_info:
                 content = r.sdk_info.get("content", "")
                 api_name = self._extract_api_name(content)
+                ref_id = f"{r.reference_source}/{r.reference_id}" if r.reference_id else f"kb1/unknown"
 
-                if api_name and api_name not in seen_apis:
-                    seen_apis.add(api_name)
-                    lines.append(f"\n### {api_name}")
-                    lines.append(self._extract_sdk_block(content))
+                if api_name and api_name not in api_map:
+                    api_map[api_name] = (ref_id, content)
 
-        return "\n".join(lines) if lines else "（无，所有步骤均已匹配到已有 BDD）"
+        if not api_map:
+            return "（无，所有步骤均已匹配到已有 BDD）"
+
+        # 构建表格头部
+        lines = ["| ID | API 名称 | 签名/代码 |", "|----|----------|------|"]
+
+        for api_name, (ref_id, content) in api_map.items():
+            # 提取函数签名
+            signature = self._extract_sdk_signature(content)
+            lines.append(f"| {ref_id} | {api_name} | `{signature}` |")
+
+        result = "\n".join(lines)
+
+        # 添加详细代码块
+        result += "\n\n### API 详细代码\n"
+        for api_name, (ref_id, content) in api_map.items():
+            result += f"\n#### {api_name} ({ref_id})\n"
+            result += self._extract_sdk_block(content)
+
+        return result
 
     def _build_context3(self, use_case) -> str:
         """构建 Context 3：原始用例"""
@@ -299,6 +380,59 @@ class StepPromptBuilder:
         if m:
             return m.group(1).strip()
         return ""
+
+    def _extract_sdk_signature(self, content: str) -> str:
+        """从 SDK 文档中提取函数签名"""
+        import re
+        # 匹配 def func_name(...) 的第一行
+        m = re.search(r"(def\s+\w+\s*\([^)]*\)[^:]*?)[:\n]", content)
+        if m:
+            return m.group(1).strip()
+        # 回退：提取第一行 def
+        m = re.search(r"(def\s+\w+\s*\([^)]*\))", content)
+        if m:
+            return m.group(1).strip()
+        return "(签名提取失败)"
+
+    def _extract_chunk_id(self, content: str) -> str:
+        """从 BDD 文档中提取 chunk ID"""
+        import re
+        # 尝试从 metadata 中提取 chunk_id
+        m = re.search(r'chunk[_-]?id[：:\s]*([^\s\]#]+)', content, re.IGNORECASE)
+        if m:
+            return f"chunk_{m.group(1).strip()}"
+        # 尝试从标题路径提取
+        m = re.search(r'##\s+(.+?)(?:\s*/|$)', content)
+        if m:
+            title = m.group(1).strip()
+            # 转换为安全的 ID 格式
+            safe_id = re.sub(r'[^\w]+', '_', title)[:20]
+            return f"chunk_{safe_id}"
+        return "chunk_unknown"
+
+    def _build_reference_table(self, step_results: List[StepMatchResult]) -> str:
+        """
+        从 step_results 生成 Reference 映射表
+
+        Returns:
+            Markdown 格式的 Reference 表
+        """
+        lines = ["| Step | Type | Source | ID |", "|------|------|--------|-----|"]
+        for r in step_results:
+            # 提取 step 的 Gherkin 描述
+            if r.matched_bdd:
+                gherkin_lines = self._extract_gherkin(r.matched_bdd)
+                step_text = gherkin_lines[0] if gherkin_lines else r.original_step
+            else:
+                step_text = r.original_step
+
+            # 截断过长的 step 文本
+            if len(step_text) > 50:
+                step_text = step_text[:47] + "..."
+
+            lines.append(f"| {step_text} | {r.reference_type} | {r.reference_source} | {r.reference_id} |")
+
+        return "\n".join(lines)
 
     def _extract_sdk_block(self, content: str) -> str:
         """提取 SDK 函数签名和示例块"""

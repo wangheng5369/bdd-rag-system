@@ -1,22 +1,22 @@
 # BDD-RAG-System
 
-将自然语言用例文本转换为可执行的 pytest-bdd 自动化脚本的 RAG 系统。
+A RAG system that converts natural language test case descriptions into executable pytest-bdd automation scripts.
 
-## 特性
+## Features
 
-- **LLM + RAG**：基于大语言模型和检索增强生成技术
-- **自动化脚本生成**：将自然语言用例自动转换为 pytest-bdd 测试脚本
-- **多知识库支持**：SDK 知识库、BDD 场景库、Bug 报告库
-- **自愈能力**：测试失败后自动诊断和修复
+- **LLM + RAG**: Powered by Large Language Models and Retrieval-Augmented Generation
+- **Automated Script Generation**: Automatically converts natural language test cases into pytest-bdd test scripts
+- **Multi-Knowledge Base Support**: SDK knowledge base, BDD scenario library, and Bug report library
+- **Self-Healing**: Automatically diagnose and fix failures after test runs
 
-## 快速开始
+## Quick Start
 
-### 前置条件
+### Prerequisites
 
 - Python 3.8+
-- API Key（MiniMax 或 OpenAI 兼容接口）
+- API Key (MiniMax or OpenAI-compatible endpoint)
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
 pip install chromadb langchain langchain-core langchain-community
@@ -24,69 +24,69 @@ pip install sentence-transformers markdown-it-py PyYAML numpy
 pip install bge-reranker huggingface_hub
 ```
 
-### 配置
+### Configuration
 
-编辑 `config/config.yaml`，或设置环境变量：
+Edit `config/config.yaml`, or set environment variables:
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
 ```
 
-### 构建知识库（首次运行需要）
+### Build Knowledge Bases (required for first run)
 
 ```bash
-# KB1: SDK 文档嵌入
+# KB1: SDK Documentation Embedding
 python scripts/embedding_sdk.py
 
-# KB2: BDD 场景嵌入
+# KB2: BDD Scenario Embedding
 python scripts/embedding_bdd.py
 
-# KB3: Bug 报告嵌入
+# KB3: Bug Report Embedding
 python scripts/embedding_bug.py
 ```
 
 ---
 
-## 一、自动生成 BDD 脚本
+## I. Automated BDD Script Generation
 
-### 运行命令
+### Run Command
 
 ```bash
-# 使用默认用例文件
+# Use default use case file
 python main.py
 
-# 指定用例文件
+# Specify use case file
 python main.py --use-case-file docs/用例示例.md
 
-# 指定输出目录
+# Specify output directory
 python main.py --output-dir generated_scripts
 
-# 命令行指定 API Key
+# Specify API Key via command line
 python main.py --api-key "your-key"
 ```
 
-### 输入
+### Input
 
-- **用例文件**：`docs/用例示例.md` - 包含自然语言测试用例的 Markdown 文件
+- **Use Case File**: `docs/用例示例.md` - Markdown file containing natural language test cases
 
-### 输出
+### Output
 
-- **生成脚本**：`generated_scripts/` 目录下的 `.py` 文件
-- **汇总报告**：`generated_scripts/pipeline_summary.json`
+- **Generated Scripts**: `.py` files in `generated_scripts/`
+- **Summary Report**: `generated_scripts/pipeline_summary.json`
 
-### 代码调用示例
+### Code Usage Example
 
 ```python
 from core.pipeline import load_use_cases, run_pipeline
 
-# 方式1: 快捷函数
+# Method 1: Convenience function
 results = run_pipeline(
     use_cases=use_cases,
     kb1_dir="knowledge-base/kb1_aw_sdk/indexed/chroma_db",
     kb2_dir="knowledge-base/kb2_bdd_scenarios/indexed/chroma_db"
 )
 
-# 方式2: Pipeline 类（更多控制）
+# Method 2: Pipeline class (more control)
 from core.pipeline import Pipeline
 from core.llm import create_llm
 
@@ -102,99 +102,100 @@ for result in pipeline.run_batch(use_cases):
 
 ---
 
-## 二、自动分析失败脚本
+## II. Automated Failure Analysis
 
-当 BDD 测试失败后，可以使用自愈流程进行自动诊断和生成分析报告。
+When a BDD test fails, use the self-healing workflow for automatic diagnosis and report generation.
 
-### 运行命令
+### Self-Healing Run Command
 
 ```bash
 python3 scripts/test_self_healing_flow.py
 ```
 
-### 输入
+### Self-Healing Input
 
-- **失败日志文件**：`docs/脚本失败日志示例.md` - 包含测试失败用例的日志
+- **Failure Log File**: `docs/脚本失败日志示例.md` - Log containing test failure cases
 
-### 输出
+### Self-Healing Output
 
-- **分析报告**：`tickets/` 目录下的 Markdown 报告，按类型分类存放：
-  - `tickets/script_error/` - 脚本问题报告
-  - `tickets/env_fault/` - 环境故障报告
-  - `tickets/resource_insufficient/` - 资源不足报告
-  - `tickets/version_bug/` - 版本Bug报告
-- **文件名格式**：`{case_id}_{timestamp}.md`（如 `Tc_Func_Node_001_20260728_113155.md`）
+- **Analysis Reports**: Markdown reports in `tickets/`, organized by type:
+  - `tickets/script_error/` - Script error reports
+  - `tickets/env_fault/` - Environment fault reports
+  - `tickets/resource_insufficient/` - Insufficient resource reports
+  - `tickets/version_bug/` - Version bug reports
+- **Filename Format**: `{case_id}_{timestamp}.md` (e.g., `Tc_Func_Node_001_20260728_113155.md`)
 
-### 工作流程
+### Workflow
 
 ```
-失败日志输入
+Failure Log Input
     │
     ▼
 ┌─────────────────────────────────────────────┐
-│  解析失败日志，提取每个失败用例的 log_info   │
+│  Parse failure log, extract log_info for    │
+│  each failed test case                       │
 └─────────────────────────────────────────────┘
     │
     ▼
 ┌─────────────────────────────────────────────┐
-│           Fast Path 快速分类                 │
-│  • 脚本错误 (SCRIPT_ERROR)                  │
-│  • 资源不足 (RESOURCE_INSUFFICIENT)         │
-│  • 版本Bug (VERSION_BUG)                    │
-│  • 环境故障 (ENV_FAULT)                     │
-│  • 未知 (UNKNOWN)                           │
+│           Fast Path Quick Classification     │
+│  • Script Error (SCRIPT_ERROR)              │
+│  • Resource Insufficient (RESOURCE_INSUFFICIENT)
+│  • Version Bug (VERSION_BUG)                │
+│  • Environment Fault (ENV_FAULT)           │
+│  • Unknown (UNKNOWN)                        │
 └─────────────────────────────────────────────┘
     │
     ├── SCRIPT_ERROR / RESOURCE_INSUFFICIENT
-    │    │  直接生成报告 ✅
+    │    │  Generate report directly ✅
     │    ▼
     │    tickets/{case_id}_{timestamp}.md
     │
     └── VERSION_BUG / ENV_FAULT / UNKNOWN
-         │  移交给 Slow Path
+         │  Escalate to Slow Path
          ▼
     ┌─────────────────────────────────────────────┐
-    │           Slow Path 深度分析                 │
-    │  • RAG 在 KB3 中检索相似 Bug                │
-    │  • Rerank 取 Top-3 最相关记录               │
-    │  • 判断检索是否命中（top-1 相似度 >= 0.4）  │
-    │  • LLM 生成诊断结论                         │
+    │           Slow Path Deep Analysis            │
+    │  • RAG searches KB3 for similar Bugs       │
+    │  • Rerank selects Top-3 most relevant      │
+    │  • Check hit (top-1 similarity >= 0.4)     │
+    │  • LLM generates diagnosis                 │
     └─────────────────────────────────────────────┘
          │
          ▼
     ┌─────────────────────────────────────────────┐
     │  tickets/{case_id}_{timestamp}.md           │
-    │  - 检索命中：疑似已知 bug（Bug ID）         │
-    │  - 检索 MISS：找不到已知 bug，疑似新版本问题 │
+    │  - Hit: Suspected known bug (Bug ID)       │
+    │  - Miss: No known bug found, likely new    │
     └─────────────────────────────────────────────┘
 ```
 
-### 错误分类说明
+### Error Classification
 
-| 错误类型 | 关键词特征 | 处理路径 |
-|----------|-----------|----------|
-| SCRIPT_ERROR | `KeyError`, `TypeError`, `deprecated`, `Field is immutable` | Fast Path 直接生成报告 |
-| RESOURCE_INSUFFICIENT | `Quota`, `exceeded`, `out of stock`, `No Space` | Fast Path 直接生成报告 |
-| VERSION_BUG | `cgroup`, `containerd` | Slow Path RAG + LLM 分析 |
-| ENV_FAULT | `401`, `403`, `404`, `Timeout`, `Connection refused` | Slow Path RAG + LLM 分析 |
-| UNKNOWN | 无法匹配上述关键词 | Slow Path RAG + LLM 分析 |
+| Error Type | Keyword Features | Processing Path |
+|------------|------------------|----------------|
+| SCRIPT_ERROR | `KeyError`, `TypeError`, `deprecated`, `Field is immutable` | Fast Path - direct report |
+| RESOURCE_INSUFFICIENT | `Quota`, `exceeded`, `out of stock`, `No Space` | Fast Path - direct report |
+| VERSION_BUG | `cgroup`, `containerd` | Slow Path - RAG + LLM |
+| ENV_FAULT | `401`, `403`, `404`, `Timeout`, `Connection refused` | Slow Path - RAG + LLM |
+| UNKNOWN | Cannot match any keywords above | Slow Path - RAG + LLM |
 
-### 检索 MISS 判断
+### Retrieval MISS Detection
 
-当 RAG 检索结果满足以下任一条件时，判定为检索 MISS：
-- **召回层 MISS**：`bug_matches` 为空，知识库无相关内容
-- **精排层 MISS**：`top_bugs` 为空，或 top-1 相似度 < 0.4
+A retrieval MISS is判定 when any of the following conditions are met:
+- **Recall Layer MISS**: `bug_matches` is empty, no relevant content in knowledge base
+- **Rerank Layer MISS**: `top_bugs` is empty, or top-1 similarity < 0.4
 
-检索 MISS 时，报告结论为"找不到已知 bug，疑似新版本问题"。
+On retrieval MISS, the report concludes: "No known bug found, suspected new version issue".
 
-### 代码调用示例
+### Code Usage Example
 
 ```python
 from self_healing.fast_path import FastPathHealer
 from self_healing.slow_path import SlowPathHealer
 from core.llm import create_llm
 
-# 初始化
+# Initialize
 llm = create_llm()
 fast_healer = FastPathHealer(llm=llm)
 slow_healer = SlowPathHealer(
@@ -202,118 +203,120 @@ slow_healer = SlowPathHealer(
     kb3_dir="knowledge-base/kb3_bug_reports/indexed/chroma_db"
 )
 
-# 模拟失败日志信息
+# Simulated failure log info
 log_info = {
     'case_id': 'Tc_Func_Node_001',
     'type': 'error',
     'message': 'KeyError: node_req...',
-    'step_name': 'When 基于构造的请求，创建node',
-    'scenario': '重置节点并重新校验节点磁盘配置',
+    'step_name': 'When create node with constructed request',
+    'scenario': 'Reset node and verify disk configuration',
     'module': 'Node'
 }
 
-# Fast Path 诊断（返回 4 个值）
+# Fast Path diagnosis (returns 4 values)
 fixed, msg, ticket_path, category = fast_healer.diagnose_and_heal(log_info)
 
 if fixed:
-    print(f"Fast Path 直接修复: {msg}")
-    print(f"报告路径: {ticket_path}")
+    print(f"Fast Path fixed directly: {msg}")
+    print(f"Report path: {ticket_path}")
 else:
-    print(f"Fast Path 无法修复: {msg}，移交给 Slow Path")
-    # Slow Path 深度分析（传入 Fast Path 分类结果）
+    print(f"Fast Path cannot fix: {msg}, escalate to Slow Path")
+    # Slow Path deep analysis (pass Fast Path classification result)
     _, report_msg, ticket_path = slow_healer.diagnose_and_heal(
         log_info,
         fast_path_category=category,
         case_id=log_info.get('case_id', '')
     )
-    print(f"分析报告: {ticket_path}")
+    print(f"Analysis report: {ticket_path}")
 ```
 
-## 系统架构
+## System Architecture
 
-BDD-RAG-System 包含三大核心阶段：
+BDD-RAG-System consists of three core phases:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────┐
-│                           BDD-RAG-System 架构图                                 │
+│                           BDD-RAG-System Architecture                          │
 ├────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │                    第一阶段：知识库构建 (Knowledge Base)                  │   │
+│  │               Phase 1: Knowledge Base Construction                       │   │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                   │   │
-│  │  │   KB1        │  │   KB2        │  │   KB3        │                   │   │
-│  │  │   SDK接口    │  │   BDD场景    │  │   Bug报告    │                   │   │
-│  │  │   定义       │  │   步骤定义   │  │   故障诊断   │                   │   │
-│  │  │              │  │              │  │   知识       │                   │   │
+│  │  │   KB1       │  │   KB2       │  │   KB3       │                   │   │
+│  │  │   SDK API   │  │   BDD       │  │   Bug       │                   │   │
+│  │  │   Definitions│  │   Scenarios │  │   Reports   │                   │   │
 │  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                   │   │
 │  │         │                 │                 │                            │   │
 │  │         ▼                 ▼                 ▼                            │   │
 │  │  ┌─────────────────────────────────────────────────────────────┐        │   │
-│  │  │           BGE-M3 Embedding + ChromaDB 向量存储               │        │   │
+│  │  │           BGE-M3 Embedding + ChromaDB Vector Store          │        │   │
 │  │  └─────────────────────────────────────────────────────────────┘        │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                            │
 │                                    ▼                                            │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │                  第二阶段：BDD脚本自动生成 (Auto Script Generation)        │   │
+│  │               Phase 2: BDD Script Auto Generation                        │   │
 │  │                                                                         │   │
-│  │   用例文本 ──→ 解析 ──→ KB2向量检索 ──→ Reranker重排 ──┐                 │   │
+│  │   Use Case Text ──→ Parse ──→ KB2 Vector Search ──→ Rerank ──┐           │   │
 │  │                                                 │                          │   │
 │  │                              ┌──────────────────┴──────────────────┐      │   │
 │  │                              │                                     │      │   │
-│  │                         ┌────▼────┐                        ┌──────▼────┐  │   │
-│  │                         │ HIT路径  │                        │ MISS路径  │  │   │
-│  │                         │ KB2命中  │                        │ KB2未命中  │  │   │
-│  │                         └────┬────┘                        └──────┬────┘  │   │
-│  │                              │                                     │      │   │
-│  │                              │                            ┌───────▼──────┐│  │
-│  │                              │                            │  查KB1获取SDK ││  │
-│  │                              │                            │  StepWriter  ││  │
-│  │                              │                            └──────────────┘│  │
-│  │                              │                                     │      │   │
-│  │                              └─────────────┬───────────────────────┘      │   │
-│  │                                            │                              │   │
-│  │                                            ▼                              │   │
-│  │                                   ┌─────────────────┐                     │   │
-│  │                                   │  LLM生成脚本    │                     │   │
-│  │                                   │  (MiniMax-M3)   │                     │   │
-│  │                                   └────────┬────────┘                     │   │
-│  │                                            │                              │   │
-│  │                                            ▼                              │   │
-│  │                                   ┌─────────────────┐                     │   │
-│  │                                   │ ScriptVerifier  │                     │   │
-│  │                                   │ 语法+API校验    │                     │   │
-│  │                                   └────────┬────────┘                     │   │
-│  │                                            │                              │   │
-│  │                                            ▼                              │   │
-│  │                                   ┌─────────────────┐                     │   │
-│  │                                   │  LocalTester    │                     │   │
-│  │                                   │  pytest-bdd运行 │                     │   │
-│  │                                   └─────────────────┘                     │   │
+│  │                         ┌────▼────┐                        ┌───────▼────┐│  │
+│  │                         │  HIT   │                        │   MISS    ││  │
+│  │                         │  Path  │                        │   Path    ││  │
+│  │                         └────┬────┘                        └───────┬────┘│  │
+│  │                              │                                     │      │  │
+│  │                              │                            ┌───────▼──────┐│ │
+│  │                              │                            │ Query KB1   ││ │
+│  │                              │                            │ for SDK     ││ │
+│  │                              │                            │ StepWriter  ││ │
+│  │                              │                            └─────────────┘│ │
+│  │                              │                                     │      │  │
+│  │                              └─────────────┬───────────────────────┘      │  │
+│  │                                            │                              │  │
+│  │                                            ▼                              │  │
+│  │                                   ┌─────────────────┐                     │  │
+│  │                                   │  LLM Generate   │                     │  │
+│  │                                   │  Script        │                     │  │
+│  │                                   │  (MiniMax-M3)  │                     │  │
+│  │                                   └────────┬────────┘                     │  │
+│  │                                            │                              │  │
+│  │                                            ▼                              │  │
+│  │                                   ┌─────────────────┐                     │  │
+│  │                                   │ ScriptVerifier  │                     │  │
+│  │                                   │ Syntax+API      │                     │  │
+│  │                                   └────────┬────────┘                     │  │
+│  │                                            │                              │  │
+│  │                                            ▼                              │  │
+│  │                                   ┌─────────────────┐                     │  │
+│  │                                   │  LocalTester    │                     │  │
+│  │                                   │  pytest-bdd     │                     │  │
+│  │                                   └─────────────────┘                     │  │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                            │
-│                              测试结果 ▼                                         │
+│                              Test Results ▼                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │              第三阶段：自动分析自愈 (Auto Failure Analysis & Self-Healing) │   │
+│  │       Phase 3: Auto Failure Analysis & Self-Healing                       │   │
 │  │                                                                         │   │
 │  │   ┌─────────────────────────────────────────────────────────────────┐   │   │
-│  │   │                      故障分类引擎                                 │   │   │
+│  │   │                      Fault Classification Engine                   │   │   │
 │  │   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │   │   │
-│  │   │  │ 脚本错误    │  │ 环境故障    │  │ 资源不足    │              │   │   │
-│  │   │  │ Syntax/     │  │ 401/403/    │  │ Disk/Memory/│              │   │   │
-│  │   │  │ Indent/Type │  │ Timeout     │  │ Quota       │              │   │   │
+│  │   │  │ Script Err │  │  Env Fault │  │ Resource    │              │   │   │
+│  │   │  │ Syntax/    │  │ 401/403/   │  │ Insufficient│              │   │   │
+│  │   │  │ Indent/Type│  │  Timeout   │  │ Disk/Memory/│              │   │   │
 │  │   │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │   │   │
 │  │   └─────────┼────────────────┼────────────────┼──────────────────────┘   │   │
 │  │             │                │                │                           │   │
 │  │             ▼                ▼                ▼                           │   │
 │  │   ┌─────────────────────────────────────────────────────────────┐      │   │
-│  │   │                      自愈处理                                │      │   │
+│  │   │                      Self-Healing Processing                │      │   │
 │  │   │  ┌─────────────────────────┐  ┌─────────────────────────┐   │      │   │
-│  │   │  │    Fast Path 快速路径    │  │   Slow Path 慢速路径    │   │      │   │
-│  │   │  │    (确定性错误自动修复)   │  │   (复杂问题RAG+LLM分析) │   │      │   │
-│  │   │  │  • 脚本语法错误自动修复   │  │  • KB3 Bug知识库检索    │   │      │
-│  │   │  │  • 环境故障通知Oncall   │  │  • LLM深度分析根因      │   │      │
-│  │   │  │  • 资源问题清理/调整    │  │  • 生成排查单           │   │      │
+│  │   │  │    Fast Path           │  │    Slow Path            │   │      │   │
+│  │   │  │    (Deterministic Err  │  │    (Complex Issues      │   │      │   │
+│  │   │  │     Auto-Fix)         │  │     RAG+LLM Analysis)   │   │      │   │
+│  │   │  │  • Script syntax fix  │  │  • KB3 Bug search      │   │      │
+│  │   │  │  • Env fault notify  │  │  • LLM root cause      │   │      │
+│  │   │  │  • Resource cleanup  │  │  • Generate ticket     │   │      │
 │  │   │  └─────────────────────────┘  └─────────────────────────┘   │      │   │
 │  │   └─────────────────────────────────────────────────────────────┘      │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
@@ -321,170 +324,173 @@ BDD-RAG-System 包含三大核心阶段：
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 数据流概览
+### Data Flow Overview
 
-| 阶段 | 输入 | 处理 | 输出 |
-|------|------|------|------|
-| **第一阶段** | SDK/BDD/Bug 原始文档 | BGE-M3 Embedding + ChromaDB | 向量化的知识库 |
-| **第二阶段** | 自然语言用例 | RAG检索 → LLM生成 → 验证 | pytest-bdd 脚本 |
-| **第三阶段** | 测试执行结果/错误日志 | 分类 → Fast/Slow Path | 自愈结果/排查单 |
+| Phase | Input | Processing | Output |
+|-------|-------|------------|--------|
+| **Phase 1** | SDK/BDD/Bug raw docs | BGE-M3 Embedding + ChromaDB | Vectorized knowledge base |
+| **Phase 2** | Natural language use cases | RAG retrieval → LLM generation → Verification | pytest-bdd scripts |
+| **Phase 3** | Test execution results/error logs | Classification → Fast/Slow Path | Self-healing results/tickets |
 
-### 核心模块
+### Core Modules
 
-| 模块 | 文件 | 职责 |
-|------|------|------|
-| **用例解析** | `core/pipeline/use_case_parser.py` | 解析用例文档为 `UseCase` 结构 |
-| **Pipeline** | `core/pipeline/pipeline.py` | 串联 Phase2-5，复用已有模块 |
-| **Retrieval** | `core/retrieval/retrieval.py` | Phase2+3，向量检索 + 重排 |
-| **StepWriter** | `core/step_writer/step_writer.py` | MISS 时从 KB1 生成 BDD Step |
-| **LLMGenerator** | `core/llm/llm.py` | 调用 LLM 生成 Step 和脚本 |
-| **LocalTester** | `core/testing/testing.py` | 运行 pytest-bdd 并解析结果 |
-| **ScriptVerifier** | `core/pipeline/script_verifier.py` | 语法 + API 签名校验 |
+| Module | File | Responsibility |
+|--------|------|----------------|
+| **UseCase Parser** | `core/pipeline/use_case_parser.py` | Parse use case documents into `UseCase` structures |
+| **Pipeline** | `core/pipeline/pipeline.py` | Orchestrate Phase 2-5, reuse existing modules |
+| **Retrieval** | `core/retrieval/retrieval.py` | Phase 2+3, vector search + reranking |
+| **StepWriter** | `core/step_writer/step_writer.py` | Generate BDD Steps from KB1 on MISS |
+| **LLMGenerator** | `core/llm/llm.py` | Call LLM to generate Steps and scripts |
+| **LocalTester** | `core/testing/testing.py` | Run pytest-bdd and parse results |
+| **ScriptVerifier** | `core/pipeline/script_verifier.py` | Syntax + API signature verification |
 
-### 自愈模块 (Self-Healing)
+### Self-Healing Modules
 
-| 模块 | 文件 | 职责 |
-|------|------|------|
-| **Fast Path** | `self-healing/fast_path/fast_path.py` | 快速路径 - 确定性错误自动修复 |
-| **Slow Path** | `self-healing/slow_path/slow_path.py` | 慢速路径 - 复杂问题 RAG + LLM 分析 |
+| Module | File | Responsibility |
+|--------|------|----------------|
+| **Fast Path** | `self-healing/fast_path/fast_path.py` | Fast path - deterministic error auto-fix |
+| **Slow Path** | `self-healing/slow_path/slow_path.py` | Slow path - complex issues via RAG + LLM |
 
-#### Fast Path 快速路径
+#### Fast Path
 
-处理**确定性高、简单的错误**，无需 LLM 介入：
+Handles **high-confidence, simple errors** without LLM intervention:
 
-| 错误类型 | 关键词特征 | 处理方式 |
-|----------|-----------|----------|
-| 脚本错误 | `SyntaxError`, `IndentationError`, `NameError`, `TypeError` | 自动修复脚本 |
-| 环境故障 | `401 Unauthorized`, `403 Forbidden`, `Timeout`, `Connection Refused` | 通知 Oncall |
-| 资源不足 | `No Space Left`, `Out of Memory`, `Quota Exceeded` | 清理资源/调整配额 |
+| Error Type | Keyword Features | Handling |
+|------------|------------------|----------|
+| Script Error | `SyntaxError`, `IndentationError`, `NameError`, `TypeError` | Auto-fix script |
+| Environment Fault | `401 Unauthorized`, `403 Forbidden`, `Timeout`, `Connection Refused` | Notify Oncall |
+| Resource Insufficient | `No Space Left`, `Out of Memory`, `Quota Exceeded` | Clean up resources/adjust quota |
 
-#### Slow Path 慢速路径
+#### Slow Path
 
-处理**复杂逻辑、未知分支的疑难问题**，通过 RAG + LLM 深度分析：
+Handles **complex logic and unknown branches** via RAG + LLM deep analysis:
 
-1. **RAG 检索**：在 KB3 (Bug 知识库) 中查找相似故障记录
-2. **Rerank 重排**：获取 Top-3 最相关的 Bug 记录
-3. **LLM 分析**：深度分析根因和解决方案
-4. **生成排查单**：创建工单等待人工确认
-5. **知识库更新**：问题解决后回写知识库
+1. **RAG Retrieval**: Search KB3 (Bug knowledge base) for similar failure records
+2. **Rerank**: Get Top-3 most relevant Bug records
+3. **LLM Analysis**: Deep analysis of root cause and solution
+4. **Generate Ticket**: Create ticket for human confirmation
+5. **Knowledge Base Update**: Write back after resolution
 
-### 自愈工作流
+### Self-Healing Workflow
 
 ```
-测试失败日志
+Test Failure Log
     │
     ▼
 ┌─────────────────────────────────────────────────────┐
-│                   故障分类引擎                        │
-│  提取关键词 → 匹配错误类型 → 确定处理路径              │
+│              Fault Classification Engine            │
+│  Extract keywords → Match error type → Determine   │
+│  processing path                                    │
 └─────────────────────────────────────────────────────┘
                     │
         ┌───────────┴───────────┐
         ▼                       ▼
 ┌───────────────┐       ┌───────────────┐
 │  Fast Path    │       │  Slow Path    │
-│  确定性错误    │       │  复杂问题      │
+│  Deterministic│       │  Complex      │
 └───────┬───────┘       └───────┬───────┘
         │                       │
         ▼                       ▼
 ┌───────────────┐       ┌───────────────┐
-│ 自动修复脚本   │       │ RAG + LLM 分析 │
-│ 或通知 Oncall │       │ 生成排查单     │
-└───────────────┘       └───────┬───────┘
+│ Auto-fix or   │       │ RAG + LLM     │
+│ notify Oncall │       │ Generate      │
+└───────────────┘       │ ticket        │
+                        └───────┬───────┘
                                 │
                                 ▼
                         ┌───────────────┐
-                        │ 知识库更新     │
-                        │ (学到的经验)   │
+                        │ Knowledge Base│
+                        │ Update        │
+                        │ (learned)     │
                         └───────────────┘
 ```
 
-## 目录结构
+## Directory Structure
 
 ```
 bdd-rag-system/
-├── main.py                      # 主入口
+├── main.py                      # Main entry point
 ├── config/
-│   ├── config.yaml              # LLM 配置
-│   └── config_loader.py         # 配置加载工具
+│   ├── config.yaml              # LLM configuration
+│   └── config_loader.py         # Config loader utility
 ├── core/
-│   ├── pipeline/                # Pipeline 编排器
+│   ├── pipeline/                # Pipeline orchestrator
 │   │   ├── pipeline.py
 │   │   ├── use_case_parser.py
 │   │   └── step_prompt_builder.py
-│   ├── retrieval/               # 向量检索 (ChromaDB + BGE-M3)
+│   ├── retrieval/               # Vector search (ChromaDB + BGE-M3)
 │   │   └── retrieval.py
-│   ├── rerank/                  # 重排模块 (bge-reranker)
+│   ├── rerank/                  # Rerank module (bge-reranker)
 │   │   └── rerank.py
-│   ├── step_writer/             # Step 生成
+│   ├── step_writer/             # Step generation
 │   │   └── step_writer.py
-│   ├── llm/                     # LLM 调用
+│   ├── llm/                     # LLM invocation
 │   │   └── llm.py
-│   └── testing/                 # 本地测试执行
+│   └── testing/                 # Local test execution
 │       └── testing.py
-├── knowledge-base/              # 三个知识库
-│   ├── kb1_aw_sdk/              # KB1: SDK 接口定义
-│   ├── kb2_bdd_scenarios/       # KB2: BDD 场景
-│   └── kb3_bug_reports/         # KB3: Bug 报告
-├── scripts/                     # Embedding 脚本
+├── knowledge-base/              # Three knowledge bases
+│   ├── kb1_aw_sdk/              # KB1: SDK interface definitions
+│   ├── kb2_bdd_scenarios/       # KB2: BDD scenarios
+│   └── kb3_bug_reports/         # KB3: Bug reports
+├── scripts/                     # Embedding scripts
 │   ├── embedding_sdk.py
 │   ├── embedding_bdd.py
 │   └── embedding_bug.py
-├── self_healing/                # 自愈模块
-│   ├── fast_path/               # 快速修复
-│   └── slow_path/               # 复杂问题处理
-├── docs/                        # 文档
-│   └── 用例示例.md              # 示例用例
-└── generated_scripts/           # 生成脚本输出目录
+├── self_healing/                # Self-healing modules
+│   ├── fast_path/               # Fast fix
+│   └── slow_path/               # Complex issue handling
+├── docs/                        # Documentation
+│   └── 用例示例.md              # Sample use cases
+└── generated_scripts/           # Generated script output directory
 ```
 
-## 配置说明
+## Configuration
 
-`config/config.yaml` 配置项：
+`config/config.yaml` options:
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `llm_provider` | LLM 提供商 (`anthropic` / `openai`) | `openai` |
-| `base_url` | API 地址 | `https://api.minimaxi.com/v1` |
-| `api_key` | API Key | 环境变量 `OPENAI_API_KEY` |
-| `model` | 模型名称 | `MiniMax-M3` |
-| `max_tokens` | 最大 token 数 | `4096` |
+| Config | Description | Default |
+|--------|-------------|---------|
+| `llm_provider` | LLM provider (`anthropic` / `openai`) | `openai` |
+| `base_url` | API endpoint | `https://api.minimaxi.com/v1` |
+| `api_key` | API Key | Environment variable `OPENAI_API_KEY` |
+| `model` | Model name | `MiniMax-M3` |
+| `max_tokens` | Max tokens | `4096` |
 
-## 输出
+## Output
 
 ```
 generated_scripts/
-├── Tc_Func_Node_001.py         # 生成的 pytest-bdd 脚本
+├── Tc_Func_Node_001.py         # Generated pytest-bdd script
 ├── Tc_Func_Node_001_result.json
 ├── Tc_Func_Node_002.py
 ├── Tc_Func_Node_002_result.json
-└── pipeline_summary.json         # 汇总报告
+└── pipeline_summary.json         # Summary report
 ```
 
-## 技术栈
+## Tech Stack
 
-| 组件 | 技术 |
-|------|------|
+| Component | Technology |
+|-----------|------------|
 | Embedding | BAAI/bge-m3, BAAI/bge-large-zh-v1.5 |
 | Reranker | bge-reranker |
 | Vector DB | ChromaDB |
-| LLM | OpenAI 兼容接口 (MiniMax-M3) |
+| LLM | OpenAI-compatible interface (MiniMax-M3) |
 | Framework | LangChain |
 | Parser | markdown-it-py |
 
-## 代码调用示例
+## Code Usage Example
 
 ```python
 from core.pipeline import load_use_cases, run_pipeline
 
-# 方式1: 快捷函数
+# Method 1: Convenience function
 results = run_pipeline(
     use_cases=use_cases,
     kb1_dir="knowledge-base/kb1_aw_sdk/indexed/chroma_db",
     kb2_dir="knowledge-base/kb2_bdd_scenarios/indexed/chroma_db"
 )
 
-# 方式2: Pipeline 类（更多控制）
+# Method 2: Pipeline class (more control)
 from core.pipeline import Pipeline
 from core.llm import create_llm
 
@@ -498,6 +504,6 @@ for result in pipeline.run_batch(use_cases):
     print(result.use_case_id, result.hit, result.script_path)
 ```
 
-## 许可证
+## License
 
 MIT License
